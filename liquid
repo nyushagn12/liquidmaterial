@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Material test</title>
+
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden}
+body{background:#111;font:13px system-ui,sans-serif}
+.scene{
+    position:fixed;
+    inset:0;
+    background:url("https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D") center/cover
+}
+.liquid{
+    position:fixed;
+    overflow:hidden;
+    border-radius:50%;
+    cursor:grab;
+    touch-action:none;
+    user-select:none;
+    z-index:10
+}
+.liquid:active{cursor:grabbing}
+.liquid canvas{display:block;width:100%;height:100%}
+
+.controls{
+    position:fixed;
+    top:20px;
+    left:20px;
+    width:320px;
+    max-height:calc(100vh - 40px);
+    overflow:auto;
+    padding:18px;
+    background: #141414dd;
+    backdrop-filter:blur(12px);
+    color:#fff;
+    z-index:100
+}
+.controls h2{margin:0 0 18px;font-size:18px}
+.control{margin-bottom:16px}
+.control:last-child{margin:0}
+.head{display:flex;justify-content:space-between;margin-bottom:6px}
+.val{opacity:.65;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%}
+input[type=color]{width:100%;height:28px;padding:0;border:0;background:none}
+</style>
+</head>
+
+<body>
+
+<div class="scene"></div>
+<div id="liquid" class="liquid"></div>
+
+<div class="controls">
+    <h2>settings</h2>
+
+    <div class="control">
+        <div class="head"><span>shrink per magnifier</span><span id="shrinkV" class="val">0.991</span></div>
+        <input id="shrink" type="range" min=".90" max=".999" step=".001" value=".991">
+    </div>
+
+    <div class="control">
+        <div class="head"><span>shrinkling smoothener</span><span id="smoothV" class="val">0.50</span></div>
+        <input id="smooth" type="range" min="0" max="1" step=".01" value=".50">
+    </div>
+
+    <div class="control">
+        <div class="head"><span>general size of circle</span><span id="sizeV" class="val">166px</span></div>
+        <input id="size" type="range" min="50" max="800" value="166">
+    </div>
+
+    <div class="control">
+        <div class="head"><span>core magnification</span><span id="coreV" class="val">1.33×</span></div>
+        <input id="core" type="range" min=".1" max="3" step=".01" value="1.33">
+    </div>
+
+    <div class="control">
+        <div class="head"><span>shrinkling magnification</span><span id="shrinkMagV" class="val">1.07</span></div>
+        <input id="shrinkMag" type="range" min="0" max="2" step=".01" value="1.07">
+    </div>
+
+    <div class="control">
+        <div class="head"><span>target last magnification</span><span id="targetV" class="val">0.83×</span></div>
+        <input id="target" type="range" min=".1" max="3" step=".01" value=".83">
+    </div>
+
+    <div class="control">
+        <div class="head"><span>inner blur</span><span id="blurV" class="val">0px</span></div>
+        <input id="blur" type="range" min="0" max="10" step=".1" value="0">
+    </div>
+
+    <div class="control">
+        <div class="head"><span>tint</span><span id="tintV" class="val">0%</span></div>
+        <input id="tint" type="range" min="0" max="1" step=".01" value="0">
+        <input id="color" type="color" value="#ffffff">
+    </div>
+</div>
+
+<script>
+class Liquid {
+    constructor(el,o={}) {
+        Object.assign(this,{
+            el,
+            layers:o.layers??36,
+            size:o.size??166,
+            shrink:o.shrink??.991,
+            smooth:o.smooth??.5,
+            core:o.core??1.33,
+            shrinkMag:o.shrinkMag??1.07,
+            target:o.target??.83,
+            blur:o.blur??0,
+            tint:o.tint??0,
+            color:o.color??"#fff",
+            dpr:Math.min(devicePixelRatio||1,2),
+            x:innerWidth/2,
+            y:innerHeight/2,
+            dirty:true,
+            dragging:false
+        });
+
+        this.out=document.createElement("canvas");
+        this.ctx=this.out.getContext("2d");
+
+        this.buf=document.createElement("canvas");
+        this.bctx=this.buf.getContext("2d");
+
+        this.bg=document.createElement("canvas");
+        this.g=this.bg.getContext("2d");
+
+        el.append(this.out);
+
+        this.img=new Image();
+        this.img.crossOrigin="anonymous";
+        this.img.src="https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
+        this.img.onload=()=>{this.ready=1;this.resizeBg();this.resize();this.rebuild();this.invalidate()};
+
+        addEventListener("resize",()=>{this.resizeBg();this.resize();this.invalidate()});
+        this.pointer();
+        this.resize();
+    }
+
+    radius(i) {
+        if(!i)return this.size/2;
+        let p=i/(this.layers-1);
+        p=Math.pow(p,1+this.smooth*5);
+        return this.size/2*Math.pow(this.shrink,p*(this.layers-1));
+    }
+
+    mag(i) {
+        if(!i)return this.core;
+        if(i===this.layers-1)return this.target;
+
+        let p=Math.min(1,(i/(this.layers-1))*this.shrinkMag);
+        return this.core+(this.target-this.core)*p;
+    }
+
+    rebuild() {
+        this.r=new Float32Array(this.layers);
+        this.m=new Float32Array(this.layers);
+
+        for(let i=0;i<this.layers;i++){
+            this.r[i]=this.radius(i);
+            this.m[i]=this.mag(i);
+        }
+
+        this.resize();
+    }
+
+    resizeBg() {
+        if(!this.img.naturalWidth)return;
+
+        let w=innerWidth,h=innerHeight;
+        this.bg.width=w;
+        this.bg.height=h;
+
+        let s=Math.max(w/this.img.naturalWidth,h/this.img.naturalHeight);
+        let iw=this.img.naturalWidth*s;
+        let ih=this.img.naturalHeight*s;
+
+        this.bx=(w-iw)/2;
+        this.by=(h-ih)/2;
+        this.bw=iw;
+        this.bh=ih;
+
+        this.g.clearRect(0,0,w,h);
+        this.g.drawImage(this.img,this.bx,this.by,iw,ih);
+    }
+
+    resize() {
+        let s=this.size;
+
+        this.el.style.cssText+=`
+            width:${s}px;
+            height:${s}px;
+            left:${this.x-s/2}px;
+            top:${this.y-s/2}px;
+        `;
+
+        for(let c of [this.out,this.buf]){
+            c.width=c.height=s*this.dpr;
+            c.style.width=c.style.height=s+"px";
+        }
+
+        this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+        this.bctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+    }
+
+    render() {
+        if(!this.ready||!this.dirty)return;
+        this.dirty=false;
+
+        let s=this.size,c=s/2,b=this.bctx;
+        b.clearRect(0,0,s,s);
+
+        for(let i=0;i<this.layers;i++){
+            let ro=this.r[i];
+            let ri=i===this.layers-1?0:this.r[i+1];
+            let z=this.m[i];
+            let sw=s/z,sh=s/z;
+            let sx=this.x-sw/2,sy=this.y-sh/2;
+
+            b.save();
+
+            let p=new Path2D();
+            p.arc(c,c,ro,0,Math.PI*2);
+
+            if(ri){
+                p.moveTo(c+ri,c);
+                p.arc(c,c,ri,0,Math.PI*2,true);
+            }
+
+            b.clip(p,"evenodd");
+            b.drawImage(this.bg,sx,sy,sw,sh,0,0,s,s);
+            b.restore();
+        }
+
+        let ctx=this.ctx;
+        ctx.clearRect(0,0,s,s);
+
+        /*
+         * Inner blur:
+         * clip first, blur second.
+         * The boundary therefore remains sharp.
+         */
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(c,c,s/2,0,Math.PI*2);
+        ctx.clip();
+
+        ctx.filter=this.blur?`blur(${this.blur}px)`:"none";
+        ctx.drawImage(this.buf,0,0,s,s);
+        ctx.restore();
+
+        if(this.tint){
+            ctx.save();
+            ctx.globalAlpha=this.tint;
+            ctx.fillStyle=this.color;
+            ctx.beginPath();
+            ctx.arc(c,c,s/2,0,Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    loop() {
+        requestAnimationFrame(()=>this.loop());
+        this.render();
+    }
+
+    invalidate() {
+        this.dirty=true;
+    }
+
+    set(k,v) {
+        this[k]=v;
+
+        if(["shrink","smooth","core","shrinkMag","target"].includes(k))
+            this.rebuild();
+        else if(k==="size")
+            this.rebuild();
+
+        this.invalidate();
+    }
+
+    pointer() {
+        this.el.addEventListener("pointerdown",e=>{
+            this.dragging=true;
+            let r=this.el.getBoundingClientRect();
+            this.ox=e.clientX-r.left;
+            this.oy=e.clientY-r.top;
+            this.el.setPointerCapture(e.pointerId);
+        });
+
+        this.el.addEventListener("pointermove",e=>{
+            if(!this.dragging)return;
+
+            this.x=e.clientX-this.ox+this.size/2;
+            this.y=e.clientY-this.oy+this.size/2;
+
+            this.el.style.left=this.x-this.size/2+"px";
+            this.el.style.top=this.y-this.size/2+"px";
+
+            this.invalidate();
+        });
+
+        this.el.addEventListener("pointerup",()=>this.dragging=false);
+        this.el.addEventListener("pointercancel",()=>this.dragging=false);
+    }
+}
+
+const liquid=new Liquid(
+    document.getElementById("liquid"),
+    {
+        size:166,
+        shrink:.991,
+        smooth:.50,
+        core:1.33,
+        shrinkMag:1.07,
+        target:.83,
+        blur:0,
+        tint:0,
+        color:"#fff"
+    }
+);
+
+liquid.rebuild();
+liquid.loop();
+
+const controls={
+    shrink:["shrink",v=>v.toFixed(3)],
+    smooth:["smooth",v=>v.toFixed(2)],
+    size:["size",v=>v+"px"],
+    core:["core",v=>v.toFixed(2)+"×"],
+    shrinkMag:["shrinkMag",v=>v.toFixed(2)],
+    target:["target",v=>v.toFixed(2)+"×"],
+    blur:["blur",v=>v.toFixed(1)+"px"],
+    tint:["tint",v=>Math.round(v*100)+"%"]
+};
+
+for(const [id,[key,fmt]] of Object.entries(controls)){
+    document.getElementById(id).addEventListener("input",e=>{
+        let v=+e.target.value;
+        liquid.set(key,v);
+        document.getElementById(id+"V").textContent=fmt(v);
+    });
+}
+
+document.getElementById("color").addEventListener("input",e=>{
+    liquid.set("color",e.target.value);
+});
+</script>
+
+</body>
+</html>
