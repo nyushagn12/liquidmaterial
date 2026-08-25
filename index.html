@@ -58,8 +58,8 @@ input[type=color]{width:100%;height:28px;padding:0;border:0;background:none}
     <h2>settings</h2>
 
     <div class="control">
-        <div class="head"><span>shrink per magnifier</span><span id="shrinkV" class="val">0.991</span></div>
-        <input id="shrink" type="range" min=".90" max=".999" step=".001" value=".991">
+        <div class="head"><span>shrink per magnifier</span><span id="shrinkV" class="val">0.986</span></div>
+        <input id="shrink" type="range" min=".90" max=".999" step=".001" value=".986">
     </div>
 
     <div class="control">
@@ -68,8 +68,8 @@ input[type=color]{width:100%;height:28px;padding:0;border:0;background:none}
     </div>
 
     <div class="control">
-        <div class="head"><span>general size of circle</span><span id="sizeV" class="val">166px</span></div>
-        <input id="size" type="range" min="50" max="800" value="166">
+        <div class="head"><span>general size of circle</span><span id="sizeV" class="val">460px</span></div>
+        <input id="size" type="range" min="50" max="800" value="460">
     </div>
 
     <div class="control">
@@ -93,8 +93,8 @@ input[type=color]{width:100%;height:28px;padding:0;border:0;background:none}
     </div>
 
     <div class="control">
-        <div class="head"><span>tint</span><span id="tintV" class="val">0%</span></div>
-        <input id="tint" type="range" min="0" max="1" step=".01" value="0">
+        <div class="head"><span>tint</span><span id="tintV" class="val">8%</span></div>
+        <input id="tint" type="range" min="0" max="1" step=".01" value="0.08">
         <input id="color" type="color" value="#ffffff">
     </div>
 </div>
@@ -105,14 +105,14 @@ class Liquid {
         Object.assign(this,{
             el,
             layers:o.layers??36,
-            size:o.size??166,
-            shrink:o.shrink??.991,
+            size:o.size??460,
+            shrink:o.shrink??.986,
             smooth:o.smooth??.5,
             core:o.core??1.33,
             shrinkMag:o.shrinkMag??1.07,
             target:o.target??.83,
             blur:o.blur??0,
-            tint:o.tint??0,
+            tint:o.tint??0.08,
             color:o.color??"#fff",
             dpr:Math.min(devicePixelRatio||1,2),
             x:innerWidth/2,
@@ -315,7 +315,7 @@ const liquid=new Liquid(
         shrinkMag:1.07,
         target:.83,
         blur:0,
-        tint:8,
+        tint:0.08,
         color:"#fff"
     }
 );
