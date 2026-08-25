@@ -239,12 +239,6 @@ class Liquid {
 
         let ctx=this.ctx;
         ctx.clearRect(0,0,s,s);
-
-        /*
-         * Inner blur:
-         * clip first, blur second.
-         * The boundary therefore remains sharp.
-         */
         ctx.save();
         ctx.beginPath();
         ctx.arc(c,c,s/2,0,Math.PI*2);
@@ -314,14 +308,14 @@ class Liquid {
 const liquid=new Liquid(
     document.getElementById("liquid"),
     {
-        size:166,
-        shrink:.991,
+        size:460,
+        shrink:.986,
         smooth:.50,
         core:1.33,
         shrinkMag:1.07,
         target:.83,
         blur:0,
-        tint:0,
+        tint:8,
         color:"#fff"
     }
 );
